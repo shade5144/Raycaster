@@ -61,9 +61,9 @@ struct vector2
     double y;
 };
 
-float getVecLen(vector2 vec1, vector2 vec2)
+double getVecLen(vector2 vec1, vector2 vec2)
 {
-    return pow(vec1.x - vec2.x, 2) + pow(vec1.y - vec2.y, 2);
+    return hypot(vec1.x - vec2.x, vec1.y - vec2.y);
 }
 
 bool pointOutOfBounds(vector2 point)
@@ -102,11 +102,13 @@ public:
     int col_mod_y{0};
     double slope{0};
 
+    int player_size{5};
+
     Player(vector2 posn, int ray_length, float speed);
 
     bool rayInWall(vector2 point, char grid[COLS + 1][ROWS + 1], bool x_chosen, bool y_chosen); // Helper function
 
-    void playerMove(const Uint8 *state);
+    void playerMove(const Uint8 *state, char grid[COLS + 1][ROWS + 1]);
     void playerRotate(const Uint8 *state, int mode = 0, double amt = 1);
     void castRay(char grid[COLS + 1][ROWS + 1]);
     void playerRender();
@@ -118,7 +120,7 @@ Player::Player(vector2 posn, int ray_length, float speed)
     ray_end = (vector2){posn.x + ray_length, posn.y};
     ray_len = ray_length;
     player_speed = speed;
-    rotation = 220;
+    rotation = 185;
 }
 
 bool Player::rayInWall(vector2 point, char grid[COLS + 1][ROWS + 1], bool x_chosen, bool y_chosen)
@@ -142,14 +144,19 @@ bool Player::rayInWall(vector2 point, char grid[COLS + 1][ROWS + 1], bool x_chos
     return false;
 }
 
-void Player::playerMove(const Uint8 *state)
+// Fine tune player's movement
+void Player::playerMove(const Uint8 *state, char grid[COLS + 1][ROWS + 1])
 {
     int count = 0;
 
+    vector2 movement_vec = {0, 0};
+
+    vector2 dirn_vec = {1, 1};
+
     if (state[SDL_SCANCODE_W])
     {
-        player_posn.y -= player_speed;
-        ray_end.y -= player_speed;
+        movement_vec.y = -player_speed;
+        dirn_vec.y = -1;
 
         count++;
         if (count == 2)
@@ -160,8 +167,8 @@ void Player::playerMove(const Uint8 *state)
 
     if (state[SDL_SCANCODE_A])
     {
-        player_posn.x -= player_speed;
-        ray_end.x -= player_speed;
+        movement_vec.x = -player_speed;
+        dirn_vec.x = -1;
 
         count++;
         if (count == 2)
@@ -172,8 +179,7 @@ void Player::playerMove(const Uint8 *state)
 
     if (state[SDL_SCANCODE_S])
     {
-        player_posn.y += player_speed;
-        ray_end.y += player_speed;
+        movement_vec.y = player_speed;
 
         count++;
         if (count == 2)
@@ -184,14 +190,19 @@ void Player::playerMove(const Uint8 *state)
 
     if (state[SDL_SCANCODE_D])
     {
-        player_posn.x += player_speed;
-        ray_end.x += player_speed;
+        movement_vec.x = player_speed;
 
         count++;
         if (count == 2)
         {
             return;
         }
+    }
+
+    if (grid[(int)((player_posn.y + movement_vec.y + dirn_vec.y * player_size / 2) / TILE_SIZE)][(int)((player_posn.x + movement_vec.x + dirn_vec.x * player_size / 2) / TILE_SIZE)] != '#')
+    {
+        player_posn.x += movement_vec.x;
+        player_posn.y += movement_vec.y;
     }
 }
 
@@ -267,8 +278,8 @@ void Player::playerRotate(const Uint8 *state, int mode, double amt) // mode and 
         tile_err_x = -1;
         tile_err_y = -1;
 
-        step_mod_x = -1;
-        step_mod_y = -1;
+        step_mod_x = 0;
+        step_mod_y = 0;
 
         col_mod_x = 1;
         col_mod_y = 1;
@@ -297,7 +308,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
 
     double base_rot = rotation;
 
-    // playerRotate(nullptr, -1, 30);
+    playerRotate(nullptr, -1, 30);
 
     // std::cout << player_posn.y << " " << player_posn.x << " " << step_size_y << " " << step_size_x << std::endl;
 
@@ -308,7 +319,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
 
         vector2 overall_buf = player_posn; // the chosen one
 
-        // playerRotate(nullptr, 1, 1);
+        playerRotate(nullptr, 1, 1);
 
         double step_size_x;
         double step_size_y;
@@ -328,7 +339,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
         }
         else
         {
-            step_size_y = fabs((int)(player_posn.y) - (((int)(player_posn.y / TILE_SIZE) + step_mod_y) * TILE_SIZE));
+            step_size_y = fabs((int)(player_posn.y) - (((int)(player_posn.y / TILE_SIZE) + step_mod_y) * TILE_SIZE)); // value is greater than 32 in 3rd quadrant?
         }
 
         bool x_chosen = false;
@@ -342,7 +353,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
         while (!pointOutOfBounds(overall_buf) && !rayInWall(overall_buf, grid, x_chosen, y_chosen))
         {
             // Figure out why the step_mods work, and collision detection for 2nd 3rd and 4th quadrants
-            std::cout << count << " " << step_size_y << " " << step_size_x << " " << rotation << std::endl;
+            // std::cout << count << " " << overall_buf.y << " " << overall_buf.x << " " << buf_posn_x.y << " " << buf_posn_x.x << " " << buf_posn_y.y << " " << buf_posn_y.x << std::endl;
 
             if (!x_chosen)
             {
@@ -354,6 +365,11 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
             else
             {
                 step_size_y = fabs((int)(overall_buf.y) - (((int)(overall_buf.y / TILE_SIZE) + step_mod_y) * TILE_SIZE));
+
+                if ((int)(step_size_y) == 0) // Bogus stuff for the third quadrant which for some reason does not work properly ie step_size becomes 32 and zero
+                {                            // in alternating fashion
+                    step_size_y = 32;
+                }
             }
 
             if (!y_chosen)
@@ -366,19 +382,27 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
             else
             {
                 step_size_x = fabs((int)(overall_buf.x) - (((int)(overall_buf.x / TILE_SIZE) + step_mod_x) * TILE_SIZE));
+
+                if ((int)(step_size_x) == 0)
+                {
+                    step_size_x = 32;
+                }
             }
 
             buf_posn_x = (vector2){overall_buf.x + tile_err_x * step_size_x, overall_buf.y + (double)(err_term_x * step_size_x * slope)};
             buf_posn_y = (vector2){overall_buf.x + (double)(step_size_y * err_term_y * (double)(1.0 / slope)), overall_buf.y + tile_err_y * step_size_y};
 
-            if (getVecLen(overall_buf, buf_posn_x) < getVecLen(overall_buf, buf_posn_y))
+            double lx = getVecLen(overall_buf, buf_posn_x);
+            double ly = getVecLen(overall_buf, buf_posn_y);
+
+            if (lx < ly)
             {
                 overall_buf = buf_posn_x;
                 x_chosen = true;
                 y_chosen = false;
             }
 
-            else
+            else if (lx >= ly)
             {
                 overall_buf = buf_posn_y;
                 y_chosen = true;
@@ -402,7 +426,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
 
 void Player::playerRender()
 {
-    drawCircle(player_posn.x, player_posn.y, 10, 1);
+    drawCircle(player_posn.x, player_posn.y, player_size, 1);
 }
 
 bool initStuff()
@@ -549,7 +573,7 @@ int main()
 
         const Uint8 *state = SDL_GetKeyboardState(NULL);
 
-        player.playerMove(state);
+        player.playerMove(state, grid);
         player.playerRotate(state);
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 128);
