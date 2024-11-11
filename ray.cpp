@@ -3,14 +3,18 @@
 #include <SDL2/SDL.h>
 
 #define TILE_SIZE 32
-#define ROWS 38
-#define COLS 25
+#define ROWS 26
+#define COLS 26
 
-const int screen_width = TILE_SIZE * ROWS;
+const int screen_width = TILE_SIZE * 48;
 const int screen_height = TILE_SIZE * COLS;
 
 SDL_Window *window = NULL;
 SDL_Renderer *renderer = NULL;
+
+// TODO:
+//- Fine tune player's movement
+//- Better collision as some rays seem to be escaping past walls
 
 void drawCircle(int centerX, int centerY, int radius, int fill = 0)
 {
@@ -125,26 +129,35 @@ Player::Player(vector2 posn, int ray_length, float speed)
 
 bool Player::rayInWall(vector2 point, char grid[COLS + 1][ROWS + 1], bool x_chosen, bool y_chosen)
 {
-    if (x_chosen)
+    if ((int)(point.x) % 32 == 0 && (int)(point.y) % 32 == 0)
     {
-        if (grid[(int)(point.y / TILE_SIZE)][(int(point.x / TILE_SIZE)) - col_mod_x] == '#')
+        if (grid[(int)(point.y / TILE_SIZE) - col_mod_y][(int(point.x / TILE_SIZE)) - col_mod_x] == '#')
         {
             return true;
         }
     }
-
-    else if (y_chosen)
+    else
     {
-        if (grid[(int)(point.y / TILE_SIZE) - col_mod_y][(int(point.x / TILE_SIZE))] == '#')
+        if (x_chosen)
         {
-            return true;
+            if (grid[(int)(point.y / TILE_SIZE)][(int(point.x / TILE_SIZE)) - col_mod_x] == '#')
+            {
+                return true;
+            }
+        }
+
+        else if (y_chosen)
+        {
+            if (grid[(int)(point.y / TILE_SIZE) - col_mod_y][(int(point.x / TILE_SIZE))] == '#')
+            {
+                return true;
+            }
         }
     }
 
     return false;
 }
 
-// Fine tune player's movement
 void Player::playerMove(const Uint8 *state, char grid[COLS + 1][ROWS + 1])
 {
     int count = 0;
@@ -159,10 +172,6 @@ void Player::playerMove(const Uint8 *state, char grid[COLS + 1][ROWS + 1])
         dirn_vec.y = -1;
 
         count++;
-        if (count == 2)
-        {
-            return;
-        }
     }
 
     if (state[SDL_SCANCODE_A])
@@ -171,32 +180,20 @@ void Player::playerMove(const Uint8 *state, char grid[COLS + 1][ROWS + 1])
         dirn_vec.x = -1;
 
         count++;
-        if (count == 2)
-        {
-            return;
-        }
     }
 
-    if (state[SDL_SCANCODE_S])
+    if (state[SDL_SCANCODE_S] && count != 2)
     {
         movement_vec.y = player_speed;
 
         count++;
-        if (count == 2)
-        {
-            return;
-        }
     }
 
-    if (state[SDL_SCANCODE_D])
+    if (state[SDL_SCANCODE_D] && count != 2)
     {
         movement_vec.x = player_speed;
 
         count++;
-        if (count == 2)
-        {
-            return;
-        }
     }
 
     if (grid[(int)((player_posn.y + movement_vec.y + dirn_vec.y * player_size / 2) / TILE_SIZE)][(int)((player_posn.x + movement_vec.x + dirn_vec.x * player_size / 2) / TILE_SIZE)] != '#')
@@ -350,7 +347,7 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
 
         int count = 0;
 
-        while (!pointOutOfBounds(overall_buf) && !rayInWall(overall_buf, grid, x_chosen, y_chosen))
+        while (!pointOutOfBounds(overall_buf) && !rayInWall(overall_buf, grid, x_chosen, y_chosen)) //&& getVecLen(player_posn, overall_buf) < 20 * TILE_SIZE
         {
             // Figure out why the step_mods work, and collision detection for 2nd 3rd and 4th quadrants
             // std::cout << count << " " << overall_buf.y << " " << overall_buf.x << " " << buf_posn_x.y << " " << buf_posn_x.x << " " << buf_posn_y.y << " " << buf_posn_y.x << std::endl;
@@ -402,20 +399,28 @@ void Player::castRay(char grid[COLS + 1][ROWS + 1])
                 y_chosen = false;
             }
 
-            else if (lx >= ly)
+            else if (lx > ly)
             {
                 overall_buf = buf_posn_y;
                 y_chosen = true;
                 x_chosen = false;
             }
 
-            SDL_SetRenderDrawColor(renderer, 0xFF, 0, 0, 0xFF);
-            drawCircle(overall_buf.x, overall_buf.y, 2, 1);
+            else
+            {
+                overall_buf = buf_posn_y;
+                y_chosen = false;
+                x_chosen = false;
+            }
+
+            // if (overall_buf.y > screen_height - TILE_SIZE && (int)(overall_buf.y) % TILE_SIZE == 0 && int(overall_buf.x) % TILE_SIZE == 0)
+            // {
+            //     SDL_SetRenderDrawColor(renderer, 0xFF, 0, 0, 0xFF);
+            //     drawCircle(overall_buf.x, overall_buf.y, 2, 1);
+            // }
 
             count++;
         }
-
-        std::cout << "------------" << std::endl;
 
         SDL_SetRenderDrawColor(renderer, 0, 0xFF, 0, 0xFF);
         SDL_RenderDrawLineF(renderer, player_posn.x, player_posn.y, overall_buf.x, overall_buf.y);
@@ -467,7 +472,7 @@ void drawGridlines(SDL_Renderer *renderer)
     for (i = 1; i < COLS; i++)
     {
 
-        SDL_RenderDrawLine(renderer, 0, i * TILE_SIZE, screen_width, i * TILE_SIZE);
+        SDL_RenderDrawLine(renderer, 0, i * TILE_SIZE, (screen_width / 2) + 2 * TILE_SIZE, i * TILE_SIZE);
     }
 
     for (i = 1; i < ROWS; i++)
@@ -522,31 +527,33 @@ void spawnWalls(SDL_Event *e, char grid[COLS + 1][ROWS + 1])
 int main()
 {
     char grid[COLS + 1][ROWS + 1] = {
-        "     #################################",
-        "                                     #",
-        "                                     #",
-        "                                     #",
-        "                                     #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "#                                    #",
-        "######################################"};
+        "##########################",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "#                        #",
+        "##########################",
+    };
 
     if (!initStuff())
     {
@@ -554,7 +561,7 @@ int main()
         return 0;
     }
 
-    Player player((vector2){20 * TILE_SIZE, 20 * TILE_SIZE}, 30 * TILE_SIZE, 2);
+    Player player((vector2){10 * TILE_SIZE, 10 * TILE_SIZE}, 30 * TILE_SIZE, 2);
 
     SDL_Event e;
     bool quit = false;
