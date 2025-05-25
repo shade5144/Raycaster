@@ -470,7 +470,7 @@ void Player::castWalls(int playerHeight, int wallHeight, double sightAngle) // m
     double theta = fov / 2;
     double dec_amt = (double)fov / (double)ray_num;
 
-    double proj_plane_distance = (30 * TILE_SIZE / (2 * tan((fov / 2) * M_PI / 180))) * TILE_SIZE; // Multiplied by TILE_SIZE for scaling
+    double proj_plane_distance = (21 * TILE_SIZE / (2 * tan((fov / 2) * M_PI / 180))) * TILE_SIZE; // Multiplied by TILE_SIZE for scaling
 
     for (int i = 0; i < ray_num; i++)
     {
